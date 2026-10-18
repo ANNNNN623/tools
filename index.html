@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>花蓮全區順路旅遊行程規劃器</title>
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Font Awesome 圖示 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+        #map {
+            width: 100%;
+            height: 100%;
+            min-height: 400px;
+            background-color: #e5e7eb;
+        }
+        .custom-number-icon {
+            background-color: #2563eb;
+            color: white;
+            border-radius: 50%;
+            border: 2px solid white;
+            text-align: center;
+            font-weight: bold;
+            font-size: 13px;
+            line-height: 24px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.4);
+        }
+        .start-number-icon {
+            background-color: #ef4444;
+            color: white;
+            border-radius: 50%;
+            border: 2px solid white;
+            text-align: center;
+            font-weight: bold;
+            font-size: 13px;
+            line-height: 24px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.4);
+        }
+    </style>
+</head>
+<body class="bg-slate-50 font-sans text-slate-800 flex flex-col h-screen overflow-hidden">
+
+    <!-- 頂部 Header -->
+    <header class="bg-blue-600 text-white px-6 py-4 shadow-md flex justify-between items-center h-[60px] flex-shrink-0 z-10">
+        <div class="flex items-center gap-3">
+            <i class="fa-solid fa-route text-2xl"></i>
+            <h1 class="text-xl font-bold tracking-wide">花蓮全區順路旅遊行程規劃器</h1>
+        </div>
+        <span class="text-xs bg-blue-700 px-3 py-1 rounded-full text-blue-100 hidden sm:inline">自動順路規劃 / 智慧地址解析</span>
+    </header>
+
+    <!-- 主要內容區 -->
+    <div class="flex-1 flex flex-col lg:flex-row overflow-hidden">
+        
+        <!-- 左側控制面板 -->
+        <div class="w-full lg:w-[420px] xl:w-[460px] p-4 space-y-4 overflow-y-auto bg-white border-r border-slate-200 flex-shrink-0 flex flex-col">
+            
+            <!-- 步驟一：設定出發地 -->
+            <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 shadow-sm space-y-2">
+                <label class="block font-bold text-slate-700 text-sm flex items-center gap-2">
+                    <i class="fa-solid fa-location-dot text-red-500"></i> 第一站：輸入你的出發地
+                </label>
+                <div class="flex gap-2">
+                    <input type="text" id="startInput" placeholder="例：花蓮車站、花蓮遠雄悅來大飯店..." 
+                        class="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        value="花蓮火車站">
+                    <button onclick="setCustomStart()" class="bg-red-500 hover:bg-red-600 text-white px-3 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap">
+                        設定起點
+                    </button>
+                </div>
+                <p id="startStatus" class="text-xs text-slate-500">目前起點：花蓮火車站</p>
+            </div>
+
+            <!-- 步驟二：挑選花蓮景點/美食/車站 -->
+            <div class="space-y-2">
+                <div class="flex justify-between items-center">
+                    <h2 class="font-bold text-slate-700 text-sm flex items-center gap-2">
+                        <i class="fa-solid fa-compass text-blue-500"></i> 選擇想去的景點 / 美食
+                    </h2>
+                    <select id="categoryFilter" onchange="filterSpots()" class="text-xs border rounded-md px-2 py-1 bg-white">
+                        <option value="all">全部分類</option>
+                        <option value="station">交通車站</option>
+                        <option value="spot">熱門景點</option>
+                        <option value="food">在地美食</option>
+                    </select>
+                </div>
+
+                <div id="spotsContainer" class="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto p-1 bg-slate-50 rounded-lg border border-slate-200">
+                    <!-- 由 JS 動態渲染 -->
+                </div>
+            </div>
+
+            <!-- 手動新增景點 (經緯度改為選填) -->
+            <details class="bg-slate-50 p-2.5 rounded-lg border border-slate-200 text-xs">
+                <summary class="font-medium text-slate-600 cursor-pointer flex justify-between items-center">
+                    <span><i class="fa-solid fa-plus-circle text-blue-500"></i> 沒找到想去的地方？手動新增地點</span>
+                    <span class="text-[10px] text-slate-400">(經緯度選填)</span>
+                </summary>
+                <div class="mt-2 space-y-2">
+                    <input type="text" id="customSpotName" placeholder="景點名稱或地址 (必填，例: 翡翠谷 / 花蓮縣吉安鄉...)" class="w-full px-2 py-1.5 border rounded focus:ring-1 focus:ring-blue-500">
+                    <div class="flex gap-2">
+                        <input type="number" step="any" id="customLat" placeholder="緯度 Lat (選填，例: 23.95)" class="w-1/2 px-2 py-1 border rounded">
+                        <input type="number" step="any" id="customLng" placeholder="經度 Lng (選填，例: 121.55)" class="w-1/2 px-2 py-1 border rounded">
+                    </div>
+                    <button onclick="addCustomSpot()" id="addSpotBtn" class="w-full bg-slate-700 text-white py-1.5 rounded hover:bg-slate-800 transition">
+                        新增至行程選單
+                    </button>
+                    <p id="customAddStatus" class="text-[11px] text-slate-400"></p>
+                </div>
+            </details>
+
+            <!-- 步驟三：已選擇行程列表與規劃按鈕 -->
+            <div class="space-y-3 flex-1 flex flex-col justify-between pt-1">
+                <div>
+                    <div class="flex justify-between items-center mb-2">
+                        <h2 class="font-bold text-slate-700 text-sm flex items-center gap-2">
+                            <i class="fa-solid fa-list-check text-green-500"></i> 已選行程 (<span id="selectedCount">0</span>)
+                        </h2>
+                        <button onclick="clearSelected()" class="text-xs text-red-500 hover:underline">清空</button>
+                    </div>
+
+                    <ul id="selectedList" class="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                        <li class="text-xs text-slate-400 italic text-center py-4">尚未選擇景點，請點擊上方按鈕加入行程</li>
+                    </ul>
+                </div>
+
+                <!-- 功能按鈕 -->
+                <div class="space-y-2 flex-shrink-0 pt-2">
+                    <button onclick="optimizeRoute()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-lg text-sm shadow transition flex justify-center items-center gap-2">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i> 自動規劃順路行程
+                    </button>
+                    <button onclick="openGoogleMaps()" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 rounded-lg text-sm shadow transition flex justify-center items-center gap-2">
+                        <i class="fa-solid fa-map-location-dot"></i> 開啟 Google Maps 導航
+                    </button>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- 右側地圖畫布區 -->
+        <div class="flex-1 relative h-full">
+            <div id="map"></div>
+        </div>
+
+    </div>
+
+    <script>
+        // 擴充版：花蓮熱門車站、景點、美食景點庫
+        const presetSpots = [
+            // 🚉 車站與交通樞紐
+            { id: 'st_1', name: '花蓮火車站', category: 'station', lat: 23.9933, lng: 121.6013 },
+            { id: 'st_2', name: '新城火車站 (太魯閣)', category: 'station', lat: 24.1273, lng: 121.6521 },
+            { id: 'st_3', name: '壽豐火車站', category: 'station', lat: 23.8687, lng: 121.5082 },
+            { id: 'st_4', name: '鳳林火車站', category: 'station', lat: 23.7436, lng: 121.4514 },
+            { id: 'st_5', name: '光復火車站', category: 'station', lat: 23.6648, lng: 121.4228 },
+            { id: 'st_6', name: '瑞穗火車站', category: 'station', lat: 23.4975, lng: 121.3776 },
+            { id: 'st_7', name: '玉里火車站', category: 'station', lat: 23.3353, lng: 121.3129 },
+
+            // 🏞️ 熱門景點 (北/中/南花蓮)
+            { id: 'sp_1', name: '太魯閣牌樓 / 砂卡礑步道', category: 'spot', lat: 24.1581, lng: 121.6223 },
+            { id: 'sp_2', name: '七星潭海岸風景區', category: 'spot', lat: 24.0322, lng: 121.6293 },
+            { id: 'sp_3', name: '松園別館', category: 'spot', lat: 23.9825, lng: 121.6148 },
+            { id: 'sp_4', name: '將軍府 (1935園區)', category: 'spot', lat: 23.9802, lng: 121.6111 },
+            { id: 'sp_5', name: '吉安慶修院', category: 'spot', lat: 23.9744, lng: 121.5649 },
+            { id: 'sp_6', name: '翡翠谷 (水簾瀑布)', category: 'spot', lat: 23.9542, lng: 121.5369 },
+            { id: 'sp_7', name: '貨櫃星巴克 (洄瀾門市)', category: 'spot', lat: 23.9312, lng: 121.5947 },
+            { id: 'sp_8', name: '遠雄海洋公園', category: 'spot', lat: 23.9015, lng: 121.6047 },
+            { id: 'sp_9', name: '鯉魚潭', category: 'spot', lat: 23.9304, lng: 121.5052 },
+            { id: 'sp_10', name: '雲山水自然生態農莊', category: 'spot', lat: 23.8344, lng: 121.5161 },
+            { id: 'sp_11', name: '林田山林業文化園區', category: 'spot', lat: 23.7126, lng: 121.4087 },
+            { id: 'sp_12', name: '花蓮光復糖廠', category: 'spot', lat: 23.6608, lng: 121.4221 },
+            { id: 'sp_13', name: '親不知子海上古道', category: 'spot', lat: 23.6742, lng: 121.5678 },
+            { id: 'sp_14', name: '石梯坪海岸單面山', category: 'spot', lat: 23.4897, lng: 121.5085 },
+            { id: 'sp_15', name: '瑞穗牧場', category: 'spot', lat: 23.4802, lng: 121.3486 },
+            { id: 'sp_16', name: '赤科山金針花海', category: 'spot', lat: 23.3857, lng: 121.3858 },
+            { id: 'sp_17', name: '六十石山金針花海', category: 'spot', lat: 23.2185, lng: 121.3142 },
+
+            // 🍜 在地特色美食與餐廳
+            { id: 'fd_1', name: '東大門夜市', category: 'food', lat: 23.9748, lng: 121.6116 },
+            { id: 'fd_2', name: '公正包子', category: 'food', lat: 23.9765, lng: 121.6072 },
+            { id: 'fd_3', name: '炸蛋蔥油餅 (黃車)', category: 'food', lat: 23.9806, lng: 121.6087 },
+            { id: 'fd_4', name: '液香扁食', category: 'food', lat: 23.9754, lng: 121.6061 },
+            { id: 'fd_5', name: '廟口紅茶', category: 'food', lat: 23.9741, lng: 121.6053 },
+            { id: 'fd_6', name: '耕壽司', category: 'food', lat: 23.9762, lng: 121.6080 },
+            { id: 'fd_7', name: '佳興冰果室 (佳興檸檬汁)', category: 'food', lat: 24.1278, lng: 121.6465 },
+            { id: 'fd_8', name: '滿妹豬腳 (鳳林)', category: 'food', lat: 23.7198, lng: 121.4289 },
+            { id: 'fd_9', name: '玉里橋頭臭豆腐', category: 'food', lat: 23.3348, lng: 121.3142 },
+            { id: 'fd_10', name: '玉里麵 (璞石閣)', category: 'food', lat: 23.3341, lng: 121.3116 }
+        ];
+
+        let startLocation = { name: '花蓮火車站', lat: 23.9933, lng: 121.6013 };
+        let selectedSpotIds = new Set();
+        let currentOrderedSpots = [];
+        let map, markersGroup, polylineGroup;
+
+        window.addEventListener('DOMContentLoaded', function() {
+            initMap();
+            renderSpotButtons();
+        });
+
+        function initMap() {
+            if (typeof L === 'undefined') return;
+
+            map = L.map('map').setView([startLocation.lat, startLocation.lng], 10);
+
+            // 使用 OpenTopoMap 免費圖資
+            L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+                maxZoom: 17,
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            }).addTo(map);
+
+            markersGroup = L.layerGroup().addTo(map);
+            polylineGroup = L.layerGroup().addTo(map);
+
+            updateMapMarkers();
+
+            setTimeout(() => { if (map) map.invalidateSize(); }, 300);
+            window.addEventListener('resize', () => { if (map) map.invalidateSize(); });
+        }
+
+        function renderSpotButtons(filter = 'all') {
+            const container = document.getElementById('spotsContainer');
+            container.innerHTML = '';
+            const filtered = presetSpots.filter(spot => filter === 'all' || spot.category === filter);
+
+            filtered.forEach(spot => {
+                const isSelected = selectedSpotIds.has(spot.id);
+                const btn = document.createElement('button');
+                btn.className = `p-2 rounded-lg text-xs font-medium text-left border transition flex justify-between items-center ${
+                    isSelected ? 'bg-blue-50 border-blue-500 text-blue-700 shadow-sm' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
+                }`;
+                btn.onclick = () => toggleSpot(spot.id);
+                let categoryBadge = spot.category === 'station' ? '🚉' : spot.category === 'food' ? '🍜' : '🏞️';
+
+                btn.innerHTML = `
+                    <span class="truncate">${categoryBadge} ${spot.name}</span>
+                    <i class="fa-solid ${isSelected ? 'fa-check text-blue-600' : 'fa-plus text-slate-300'}"></i>
+                `;
+                container.appendChild(btn);
+            });
+        }
+
+        function filterSpots() {
+            renderSpotButtons(document.getElementById('categoryFilter').value);
+        }
+
+        function toggleSpot(id) {
+            if (selectedSpotIds.has(id)) {
+                selectedSpotIds.delete(id);
+                currentOrderedSpots = currentOrderedSpots.filter(spot => spot.id !== id);
+            } else {
+                selectedSpotIds.add(id);
+                const spotObj = presetSpots.find(s => s.id === id);
+                if (currentOrderedSpots.length > 0) currentOrderedSpots.push(spotObj);
+            }
+            renderSpotButtons(document.getElementById('categoryFilter').value);
+            updateSelectedListUI();
+        }
+
+        async function setCustomStart() {
+            const input = document.getElementById('startInput').value.trim();
+            const statusEl = document.getElementById('startStatus');
+            if (!input) return alert('請輸入出發地名稱');
+
+            statusEl.innerText = '搜尋中...';
+            statusEl.className = 'text-xs text-blue-500 font-medium';
+
+            try {
+                const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(input + ' 花蓮')}`);
+                const data = await res.json();
+                if (data && data.length > 0) {
+                    startLocation = { name: input, lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+                    statusEl.innerText = `目前起點：${startLocation.name}`;
+                    statusEl.className = 'text-xs text-green-600 font-medium';
+                    updateMapMarkers();
+                } else {
+                    statusEl.innerText = '找不到地點，請輸入更詳細的地址';
+                    statusEl.className = 'text-xs text-red-500';
+                }
+            } catch (err) {
+                statusEl.innerText = '解析失敗，請稍後重試';
+                statusEl.className = 'text-xs text-red-500';
+            }
+        }
+
+        // 手動新增景點：支援手動輸入經緯度，也支援僅輸入名稱/地址自動轉換經緯度
+        async function addCustomSpot() {
+            const nameInput = document.getElementById('customSpotName').value.trim();
+            const latInput = document.getElementById('customLat').value.trim();
+            const lngInput = document.getElementById('customLng').value.trim();
+            const statusEl = document.getElementById('customAddStatus');
+
+            if (!nameInput) {
+                alert('請至少輸入景點名稱或地址！');
+                return;
+            }
+
+            let finalLat = parseFloat(latInput);
+            let finalLng = parseFloat(lngInput);
+
+            // 如果使用者手動填寫了經緯度，直接使用
+            if (!isNaN(finalLat) && !isNaN(finalLng)) {
+                saveNewSpot(nameInput, finalLat, finalLng);
+                statusEl.innerText = `成功新增：${nameInput}`;
+                statusEl.className = 'text-[11px] text-green-600 font-medium';
+                return;
+            }
+
+            // 如果沒填經緯度，透過 API 自動解析地址與地名
+            statusEl.innerText = '正尋找地點經緯度...';
+            statusEl.className = 'text-[11px] text-blue-500 font-medium';
+
+            try {
+                const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(nameInput + ' 花蓮')}`);
+                const data = await res.json();
+
+                if (data && data.length > 0) {
+                    finalLat = parseFloat(data[0].lat);
+                    finalLng = parseFloat(data[0].lon);
+                    saveNewSpot(nameInput, finalLat, finalLng);
+                    statusEl.innerText = `解析成功並新增：${nameInput}`;
+                    statusEl.className = 'text-[11px] text-green-600 font-medium';
+                } else {
+                    statusEl.innerText = '找不到該地點，請手動填寫經緯度或輸入更完整名稱';
+                    statusEl.className = 'text-[11px] text-red-500';
+                }
+            } catch (err) {
+                statusEl.innerText = '自動找座標失敗，請手動填寫經緯度';
+                statusEl.className = 'text-[11px] text-red-500';
+            }
+        }
+
+        function saveNewSpot(name, lat, lng) {
+            const newId = 'custom_' + Date.now();
+            const newSpot = { id: newId, name: name, category: 'spot', lat: lat, lng: lng };
+            presetSpots.push(newSpot);
+            selectedSpotIds.add(newId);
+
+            document.getElementById('customSpotName').value = '';
+            document.getElementById('customLat').value = '';
+            document.getElementById('customLng').value = '';
+
+            renderSpotButtons(document.getElementById('categoryFilter').value);
+            updateSelectedListUI();
+        }
+
+        function updateSelectedListUI() {
+            const listEl = document.getElementById('selectedList');
+            document.getElementById('selectedCount').innerText = selectedSpotIds.size;
+
+            if (selectedSpotIds.size === 0) {
+                listEl.innerHTML = '<li class="text-xs text-slate-400 italic text-center py-4">尚未選擇景點，請點擊上方按鈕加入行程</li>';
+                currentOrderedSpots = [];
+                updateMapMarkers();
+                return;
+            }
+
+            listEl.innerHTML = '';
+            const spotsToRender = currentOrderedSpots.length > 0 ? currentOrderedSpots : 
+                Array.from(selectedSpotIds).map(id => presetSpots.find(s => s.id === id)).filter(Boolean);
+
+            spotsToRender.forEach((spot, index) => {
+                const li = document.createElement('li');
+                li.className = 'flex justify-between items-center p-2 bg-slate-50 border rounded-lg text-xs';
+                li.innerHTML = `
+                    <div class="flex items-center gap-2 truncate">
+                        <span class="w-5 h-5 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold text-[10px] flex-shrink-0">
+                            ${index + 1}
+                        </span>
+                        <span class="font-medium text-slate-700 truncate">${spot.name}</span>
+                    </div>
+                    <button onclick="toggleSpot('${spot.id}')" class="text-slate-400 hover:text-red-500 ml-2">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                `;
+                listEl.appendChild(li);
+            });
+
+            updateMapMarkers();
+        }
+
+        function getDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLon/2) * Math.sin(dLon/2);
+            return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+        }
+
+        function optimizeRoute() {
+            if (selectedSpotIds.size === 0) return alert('請先選擇景點！');
+
+            let unvisited = Array.from(selectedSpotIds).map(id => presetSpots.find(s => s.id === id)).filter(Boolean);
+            let currentPoint = { lat: startLocation.lat, lng: startLocation.lng };
+            let ordered = [];
+
+            while (unvisited.length > 0) {
+                let nearestIndex = -1;
+                let minDistance = Infinity;
+
+                for (let i = 0; i < unvisited.length; i++) {
+                    let dist = getDistance(currentPoint.lat, currentPoint.lng, unvisited[i].lat, unvisited[i].lng);
+                    if (dist < minDistance) {
+                        minDistance = dist;
+                        nearestIndex = i;
+                    }
+                }
+
+                if (nearestIndex !== -1) {
+                    let nextSpot = unvisited.splice(nearestIndex, 1)[0];
+                    ordered.push(nextSpot);
+                    currentPoint = { lat: nextSpot.lat, lng: nextSpot.lng };
+                }
+            }
+
+            currentOrderedSpots = ordered;
+            updateSelectedListUI();
+            if (map) map.invalidateSize();
+            alert('順路行程排序完成！');
+        }
+
+        function updateMapMarkers() {
+            if (!map || !markersGroup || !polylineGroup) return;
+
+            markersGroup.clearLayers();
+            polylineGroup.clearLayers();
+
+            let bounds = [];
+
+            const startIcon = L.divIcon({
+                className: 'start-number-icon',
+                html: '起',
+                iconSize: [26, 26],
+                iconAnchor: [13, 13]
+            });
+
+            const startMarker = L.marker([startLocation.lat, startLocation.lng], { icon: startIcon })
+                .bindPopup(`<b>🚀 出發地：</b>${startLocation.name}`);
+            markersGroup.addLayer(startMarker);
+            bounds.push([startLocation.lat, startLocation.lng]);
+
+            const listToDraw = currentOrderedSpots.length > 0 ? currentOrderedSpots : 
+                Array.from(selectedSpotIds).map(id => presetSpots.find(s => s.id === id)).filter(Boolean);
+
+            let routeLatLngs = [[startLocation.lat, startLocation.lng]];
+
+            listToDraw.forEach((spot, index) => {
+                const icon = L.divIcon({
+                    className: 'custom-number-icon',
+                    html: `${index + 1}`,
+                    iconSize: [26, 26],
+                    iconAnchor: [13, 13]
+                });
+
+                const marker = L.marker([spot.lat, spot.lng], { icon: icon })
+                    .bindPopup(`<b>📍 第 ${index + 1} 站：</b>${spot.name}`);
+                markersGroup.addLayer(marker);
+
+                routeLatLngs.push([spot.lat, spot.lng]);
+                bounds.push([spot.lat, spot.lng]);
+            });
+
+            if (routeLatLngs.length > 1) {
+                const polyline = L.polyline(routeLatLngs, {
+                    color: '#2563eb',
+                    weight: 4,
+                    opacity: 0.75,
+                    dashArray: '8, 8'
+                });
+                polylineGroup.addLayer(polyline);
+            }
+
+            if (bounds.length > 0) {
+                map.fitBounds(bounds, { padding: [50, 50] });
+            }
+        }
+
+        function openGoogleMaps() {
+            if (selectedSpotIds.size === 0) return alert('請先選擇行程地點');
+
+            const spots = currentOrderedSpots.length > 0 ? currentOrderedSpots : 
+                Array.from(selectedSpotIds).map(id => presetSpots.find(s => s.id === id)).filter(Boolean);
+
+            const origin = encodeURIComponent(`${startLocation.lat},${startLocation.lng}`);
+            const destination = encodeURIComponent(`${spots[spots.length - 1].lat},${spots[spots.length - 1].lng}`);
+            let waypoints = spots.slice(0, -1).map(s => `${s.lat},${s.lng}`).join('|');
+            
+            let url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}`;
+            if (waypoints) url += `&waypoints=${encodeURIComponent(waypoints)}`;
+
+            window.open(url, '_blank');
+        }
+
+        function clearSelected() {
+            selectedSpotIds.clear();
+            currentOrderedSpots = [];
+            renderSpotButtons(document.getElementById('categoryFilter').value);
+            updateSelectedListUI();
+        }
+    </script>
+</body>
+</html>
